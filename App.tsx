@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { INITIAL_PATIENTS } from './constants';
 import { Patient } from './types';
 import PatientCard from './components/PatientCard';
-import { getPharmacistInsight, getSafetyStockRecommendation, parsePatientImage } from './services/geminiService';
+import { getPharmacistInsight, parsePatientImage } from './services/geminiService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const App: React.FC = () => {
@@ -18,9 +18,7 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [aiInsight, setAiInsight] = useState<string>('분석 중...');
-  const [safetyStockAi, setSafetyStockAi] = useState<string>('분석 중...');
   const [isInsightLoading, setIsInsightLoading] = useState(false);
-  const [isSafetyLoading, setIsSafetyLoading] = useState(false);
 
   useEffect(() => {
     const handlePaste = async (event: ClipboardEvent) => {
@@ -147,25 +145,28 @@ const App: React.FC = () => {
     return stats;
   }, [activePatients]);
 
+  // Fix: Line 149 error by using Object.keys to ensure proper type inference of medicationStats values.
   const chartData = useMemo(() => {
-    return Object.entries(medicationStats).map(([name, stat]) => ({ name, value: stat.totalPatients }));
+    return Object.keys(medicationStats).map(name => ({
+      name,
+      value: medicationStats[name].totalPatients
+    }));
   }, [medicationStats]);
 
   useEffect(() => {
     const fetchData = async () => {
       const urgentTargets = processedPatients.filter(p => p.isUrgent);
-      setIsInsightLoading(true);
-      const insight = await getPharmacistInsight(urgentTargets);
-      setAiInsight(insight || "긴급 재고 확인이 필요합니다.");
-      setIsInsightLoading(false);
-
-      setIsSafetyLoading(true);
-      const safety = await getSafetyStockRecommendation(medicationStats, activePatients.length);
-      setSafetyStockAi(safety || "분석 결과를 불러올 수 없습니다.");
-      setIsSafetyLoading(false);
+      if (urgentTargets.length > 0) {
+          setIsInsightLoading(true);
+          const insight = await getPharmacistInsight(urgentTargets);
+          setAiInsight(insight || "긴급 재고 확인이 필요합니다.");
+          setIsInsightLoading(false);
+      } else {
+          setAiInsight("현재 긴급하게 관리해야 할 환자가 없습니다.");
+      }
     };
     fetchData();
-  }, [processedPatients, medicationStats, activePatients.length]);
+  }, [processedPatients]);
 
   return (
     <div className="min-h-screen pb-20 bg-slate-50">
@@ -333,32 +334,6 @@ const App: React.FC = () => {
             </div>
 
             <div className="xl:col-span-4 space-y-10">
-                <div className="bg-slate-900 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-500/10 rounded-full -mr-20 -mt-20 blur-3xl group-hover:bg-indigo-500/20 transition-all duration-700"></div>
-                    <div className="flex items-center gap-4 mb-8 relative z-10">
-                        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                            <i className="fa-solid fa-microchip text-sm"></i>
-                        </div>
-                        <h3 className="text-sm font-black uppercase tracking-[0.2em] text-indigo-300">Expert Inventory Report</h3>
-                    </div>
-                    {isSafetyLoading ? (
-                        <div className="space-y-5 py-6 animate-pulse">
-                            <div className="h-3.5 bg-white/10 rounded-full w-full"></div>
-                            <div className="h-3.5 bg-white/10 rounded-full w-5/6"></div>
-                            <div className="h-3.5 bg-white/10 rounded-full w-4/6"></div>
-                            <div className="h-3.5 bg-white/10 rounded-full w-full"></div>
-                        </div>
-                    ) : (
-                        <div className="text-[15px] leading-loose space-y-6 max-h-[700px] overflow-y-auto pr-2 font-bold text-slate-200 whitespace-pre-line tracking-tight custom-scrollbar relative z-10">
-                            {safetyStockAi}
-                        </div>
-                    )}
-                    <div className="mt-10 pt-8 border-t border-white/10 text-[11px] text-slate-500 italic font-medium relative z-10 flex items-center gap-2">
-                        <i className="fa-solid fa-circle-info text-indigo-500"></i>
-                        활성 환자 처방 데이터 기반 실시간 분석 결과
-                    </div>
-                </div>
-
                 <div className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm">
                     <h3 className="text-xs font-black text-slate-400 mb-10 uppercase tracking-[0.25em] flex items-center gap-3">
                         <i className="fa-solid fa-chart-simple text-indigo-500"></i> 약물별 처방 비중
@@ -377,6 +352,10 @@ const App: React.FC = () => {
                             </Bar>
                         </BarChart>
                         </ResponsiveContainer>
+                    </div>
+                    <div className="mt-10 pt-8 border-t border-slate-100 text-[11px] text-slate-400 italic font-medium flex items-center gap-2">
+                        <i className="fa-solid fa-circle-info text-indigo-500"></i>
+                        활성 환자 처방 데이터 기반 실시간 통계
                     </div>
                 </div>
             </div>
